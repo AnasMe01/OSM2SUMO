@@ -151,25 +151,7 @@ sumo -c scenario.sumocfg
 
 These are proposed functional tests and expected outcomes, not observed experimental results.
 
-## 7. Compatibility Assessment
-
-The framework uses a diagnostic 100-point rubric (version 1.2):
-
-| Criterion | Weight |
-| --- | ---: |
-| Topology | 30 |
-| Road connectivity | 25 |
-| Vehicle permissions | 15 |
-| Road-type mapping | 10 |
-| Optional attributes | 5 |
-| Routing feasibility | 15 |
-| **Total** | **100** |
-
-Routing remains pending before conversion. Unchecked categories are excluded from the evaluated denominator, and a final score is reported only after all weighted evidence is available. A completed score of at least 80 with no critical failure yields PASS, subject to warning-based downgrades. Critical failures override the numeric score.
-
-Compatibility assessment and scenario validation are separate: a compatible network is not necessarily a validated traffic scenario. Graph reachability is not equivalent to demand routing success or realistic traffic behavior.
-
-## 8. Command-Line Interface (Optional)
+## 7. Command-Line Interface (Optional)
 
 Analyze a network without generating a scenario:
 
@@ -191,7 +173,7 @@ python osm_to_sumo.py --osm network.osm --repair --repairs speeds lanes --steps 
 
 Replace `network.osm` with the actual input path. Use `--output-dir DIRECTORY` to select the output directory. CLI validation is opt-in through `--validate-scenario`. Regenerate routes and configuration after changing the network.
 
-## 9. Automated Tests
+## 8. Automated Tests
 
 From the framework directory, run:
 
@@ -201,7 +183,7 @@ python -m unittest -v test_app.py test_network_analysis.py test_scenario_validat
 
 These test modules cover the interface, network analysis and repair engine, and scenario validation. Review the test output to determine whether all tests pass.
 
-## 10. Generated Artifacts
+## 9. Generated Artifacts
 
 | Artifact | Purpose |
 | --- | --- |
@@ -217,7 +199,7 @@ These test modules cover the interface, network analysis and repair engine, and 
 
 Artifacts depend on the selected stages and interface or CLI execution path.
 
-## 11. Limitations
+## 10. Limitations
 
 - The framework does not automatically resolve all OSM geometry, topology, conditional access, or turn-restriction issues.
 - Inferred speed limits and lane counts do not establish real-world accuracy.
@@ -225,7 +207,7 @@ Artifacts depend on the selected stages and interface or CLI execution path.
 - The compatibility score is a diagnostic rubric, not an official SUMO certification or calibrated probability.
 - Startup validation establishes initial operational readiness only, not full-trip completion or traffic realism.
 
-## 12. References
+## 11. References
 
 - [OpenStreetMap import in SUMO](https://sumo.dlr.de/docs/Networks/Import/OpenStreetMap.html)
 - [SUMO command-line options](https://sumo.dlr.de/docs/sumo.html)
