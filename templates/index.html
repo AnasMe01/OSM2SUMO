@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>OSM Network Studio</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='loading.css') }}">
+  <style>
+    .form-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px 22px;margin-bottom:18px}.form-grid label{display:flex;flex-direction:column;gap:7px;font-weight:600}.form-grid input,.form-grid select{font:inherit;padding:11px 12px;border:1px solid #cbd8e4;border-radius:8px;background:#fff;color:#203349}.composition-field,.composition-inputs{border:1px solid #dfe8f0;padding:14px;min-width:0}.composition-field legend,.composition-inputs legend{font-weight:600;padding:0 5px}.radio{display:flex!important;flex-direction:row!important;gap:9px!important;margin:8px 0}.composition-inputs{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:18px 0}.composition-inputs label{display:flex;flex-direction:column;gap:7px;font-weight:600}.composition-inputs input{font:inherit;padding:11px 12px;border:1px solid #cbd8e4;border-radius:8px}.composition-total{grid-column:1/-1}.check{display:flex;gap:9px;align-items:center;margin:11px 0;color:#526477}.traffic-form>button{margin-top:12px}.traffic-result{border-top:1px solid #e6edf3;margin-top:24px;padding-top:20px}.traffic-result h3{margin:0 0 12px}.traffic-metrics{grid-template-columns:repeat(4,minmax(0,1fr));margin:18px 0}.traffic-metrics>div{background:#eef8f6;border-color:#cce8df}.button{display:inline-block;text-decoration:none;background:#087f8c;color:#fff;border:1px solid transparent;border-radius:8px;padding:11px 20px;font:inherit;font-weight:600}.file-list{padding-left:20px;line-height:2}.traffic-report{scroll-margin-top:20px}@media(max-width:900px){.traffic-metrics{grid-template-columns:repeat(3,minmax(0,1fr))}}@media(max-width:700px){.form-grid,.composition-inputs{grid-template-columns:1fr}}@media(max-width:600px){.traffic-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    .button.secondary{background:#edf6f7;color:#076873;border-color:#c8e4e7}
+    .button.secondary:hover{filter:brightness(.94)}
+    .simulation-files{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 20px;list-style:none;padding:0;line-height:1.5}
+    .simulation-files a{display:block;padding:12px;background:#edf6f7;border:1px solid #c8e4e7;border-radius:8px;overflow-wrap:anywhere}
+    @media(max-width:600px){.simulation-files{grid-template-columns:1fr}}
+  </style>
+</head>
+<body><main>
+  <header style="text-align:center"><img class="site-logo" src="{{ url_for('static', filename='logo2.png') }}" alt="OSM2SUMO-GUI" style="display:block;width:450px;max-width:100%;height:auto;margin:0 auto 18px"><span class="eyebrow"></span><p>Turn Your map to a real simulation.</p></header>  {% for category, message in get_flashed_messages(with_categories=true) %}<div class="notice {{ category }}" role="status">{{ message }}</div>{% endfor %}
+  <section class="panel"><h2>1. Import your map</h2>
+    <form action="{{ url_for('import_osm') }}" method="post" enctype="multipart/form-data">
+      <input type="hidden" name="csrf" value="{{ session.csrf }}">
+      <label for="osm">OpenStreetMap file <small>(.osm XML, up to 100 MB)</small></label>
+      <div class="actions"><input id="osm" type="file" name="osm" accept=".osm" required><button>Import .osm</button></div>
+    </form>
+    {% if state %}<p class="file">{{ state.name }} · {{ 'Original file' if not state.revision else 'Repaired copy · revision ' ~ state.revision }}</p>{% endif %}
+  </section>
+  <section class="panel"><div class="section-head"><h2>2. Analyze & repair</h2><div class="actions">
+    <form id="analyze-form" action="{{ url_for('analyze') }}" method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}"><button {% if not state %}disabled{% endif %}>{{ 'Re-analyze' if report else 'Analyze' }}</button></form>
+    <button type="button" class="secondary" onclick="document.getElementById('repair-dialog').showModal()" {% if not report %}disabled{% endif %}>Repair…</button>
+  </div></div>
+  <div id="analysis-loading" class="analysis-loading" role="status" aria-live="polite" hidden><span class="spinner" aria-hidden="true"></span><span>Analyzing network...</span></div>
+  <div id="analysis-content">
+  {% if not report %}<p class="empty">{{ 'Repairs applied. Analyze the repaired copy when ready.' if state and state.revision else ('Ready to analyze your imported map.' if state else 'Import an .osm file to get started.') }}</p>{% else %}
+    <p>{{ 'Post-repair analysis' if state.revision else 'Original map analysis' }} · Passenger vehicles</p>
+    <div class="metrics">
+      <div><small>Nodes</small><strong>{{ report.nodes }}</strong></div>
+      <div><small>Drivable ways</small><strong>{{ report.drivable_ways }}</strong></div>
+      <div><small>Invalid ways</small><strong>{{ report.invalid_ways|length }}</strong></div>
+      <div><small>Components</small><strong>{{ report.components }}</strong></div>
+      <div><small>Missing speeds</small><strong>{{ report.ways_missing_maxspeed }}</strong></div>
+      <div><small>Missing lanes</small><strong>{{ report.ways_missing_lanes }}</strong></div>
+      <div><small>Dead ends</small><strong>{{ report.dead_end_roads }}</strong></div>
+      <div><small>Isolated nodes</small><strong>{{ report.isolated_nodes }}</strong></div>
+    </div>
+    <h3>Network statistics</h3>
+    <div class="table-wrap"><table><thead><tr><th>Metric</th><th>Count</th></tr></thead><tbody>
+      {% for key, label in [
+        ('nodes', 'Nodes'),
+        ('road_ways', 'Road ways'),
+        ('removed_invalid_ways', 'Removed invalid ways'),
+        ('components', 'Components'),
+        ('traffic_signal_nodes', 'Traffic signal nodes'),
+        ('drivable_ways', 'Drivable ways'),
+        ('non_drivable_ways', 'Non drivable ways'),
+        ('one_way_roads', 'One way roads'),
+        ('dead_end_roads', 'Dead end roads'),
+        ('isolated_nodes', 'Isolated nodes'),
+        ('nodes_outside_road_network', 'Nodes outside road network'),
+        ('duplicate_node_ids', 'Duplicate node IDs')
+      ] %}<tr><td>{{ label }}</td><td>{{ report[key] }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    <p><b>Pre-conversion:</b> {{ report.pre_conversion_status }} &nbsp; <b>Final:</b> {{ report.final_status }}</p>
+    <p>Evaluated score: <b>{{ report.compatibility.evaluated_score }} / {{ report.compatibility.evaluated_weight }}</b>. Final score remains pending until required conversion and routing checks are complete.</p>
+    <div class="table-wrap"><table><thead><tr><th>Check</th><th>Status</th><th>Finding</th></tr></thead><tbody>
+    {% for check in report.compatibility.checks %}<tr><td>{{ check.name }}</td><td><span class="badge {{ check.status }}">{{ check.status }}</span></td><td>{{ check.reason }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    {% if state.audit %}<h3>Last repair · {{ state.audit.changes }} changes</h3><div class="table-wrap"><table><thead><tr><th>Metric</th><th>Before</th><th>After</th></tr></thead><tbody>{% for key, values in state.audit.comparison.items() %}<tr><td>{{ key|replace('_', ' ') }}</td><td>{{ values.before }}</td><td>{{ values.after }}</td></tr>{% endfor %}</tbody></table></div>{% endif %}
+    {% if advice %}<details><summary>Recommendations ({{ advice|length }})</summary>{% for item in advice %}<p><b>{{ item.check }}:</b> {{ item.recommendation }}</p>{% endfor %}</details>{% endif %}
+    <div class="actions downloads">
+      <form action="{{ url_for('download', kind='osm') }}" method="get"><button type="submit" class="secondary">Download current .osm</button></form>
+      <form action="{{ url_for('download_pdf', kind='report') }}" method="get"><button type="submit" class="secondary">Download results</button></form>
+      {% if state.audit %}<form action="{{ url_for('download_pdf', kind='audit') }}" method="get"><button type="submit" class="secondary">Download repair audit</button></form>{% endif %}
+    </div>
+  {% endif %}</div></section>
+  <section class="panel" id="traffic"><h2>3. Traffic demand</h2>
+    <form action="{{ url_for('traffic') }}" method="post" class="traffic-form">
+      <input type="hidden" name="csrf" value="{{ session.csrf }}">
+      <div class="form-grid">
+        <label>Traffic profile<select name="profile"><option value="low">Low</option><option value="medium" selected>Medium</option><option value="high">High</option></select></label>
+        <label>Simulation duration<input type="number" name="duration" value="3600" min="1" required><small>seconds</small></label>
+        <label>Demand<input type="number" name="demand" value="2500" min="1" required><small>vehicles</small></label>
+        <fieldset class="composition-field"><legend>Vehicle composition</legend>
+          <label class="radio"><input type="radio" name="vehicle_class" value="passenger" checked><span>Passenger cars only</span></label>
+          <label class="radio"><input type="radio" name="vehicle_class" value="custom"><span>Custom composition</span></label>
+        </fieldset>
+        <label>Random seed<input type="number" name="seed" value="42" min="0" required></label>
+      </div>
+      <fieldset id="composition-inputs" class="composition-inputs" disabled><legend>Choose traffic types and percentages</legend>
+        <label class="type-choice"><input type="checkbox" class="type-toggle" data-field="passenger_cars" checked><span>Passenger cars</span><input type="number" name="passenger_cars" value="70" min="0" max="100" required></label>
+        <label class="type-choice"><input type="checkbox" class="type-toggle" data-field="buses" checked><span>Buses</span><input type="number" name="buses" value="10" min="0" max="100" required></label>
+        <label class="type-choice"><input type="checkbox" class="type-toggle" data-field="trucks" checked><span>Trucks</span><input type="number" name="trucks" value="10" min="0" max="100" required></label>
+        <label class="type-choice"><input type="checkbox" class="type-toggle" data-field="motorcycles" checked><span>Motorcycles</span><input type="number" name="motorcycles" value="10" min="0" max="100" required></label>
+        <label class="type-choice"><input type="checkbox" class="type-toggle" data-field="emergency"><span>Emergency</span><input type="number" name="emergency" value="0" min="0" max="100" required disabled></label>
+        <small class="composition-total"><output id="composition-total">Total: 100%</output></small>
+      </fieldset>
+      <label class="check"><input type="checkbox" checked disabled><span>Use network-aware O-D generation</span></label>
+      <label class="check"><input type="checkbox" checked disabled><span>Retry unreachable routes</span></label>
+      <button {% if not state %}disabled{% endif %}>Generate Traffic</button>
+    </form>
+    {% if state and state.traffic %}{% set traffic = state.traffic.report %}
+    <div class="traffic-result">
+      <div class="section-head"><h3>Generation completed</h3><a class="button secondary" href="#traffic-report">View report</a></div>
+      <div class="metrics traffic-metrics">
+        <div><small>Requested</small><strong>{{ traffic.requested }}</strong></div>
+        <div><small>Valid routes</small><strong>{{ traffic.valid_routes }}</strong></div>
+        <div><small>Rejected</small><strong>{{ traffic.rejected }}</strong></div>
+        <div><small>Routing success</small><strong>{{ traffic.routing_success }}%</strong></div>
+      </div>
+      <div id="traffic-report" class="traffic-report"><h3>Generated files</h3>
+        <ul class="file-list simulation-files">{% for filename in simulation_files if filename in state.traffic.files %}<li><a href="{{ url_for('download_traffic', filename=filename) }}">{{ filename }}</a></li>{% endfor %}</ul>
+        <h3>Traffic report</h3><div class="table-wrap"><table><thead><tr><th>Parameter</th><th>Value</th></tr></thead><tbody>
+        {% for key, label in [('profile', 'Traffic profile'), ('duration', 'Duration (s)'), ('requested', 'Requested vehicles'), ('valid_routes', 'Routed vehicles'), ('rejected', 'Rejected vehicles'), ('routing_success', 'Routing success (%)'), ('seed', 'Random seed')] %}<tr><td>{{ label }}</td><td>{{ traffic[key] }}</td></tr>{% endfor %}
+        </tbody></table></div>
+      </div>
+    </div>{% endif %}
+  </section>
+  <section class="panel" id="validation"><h2>4. Scenario validation &amp; reproducibility</h2>
+    {% if state and state.traffic %}
+    <form action="{{ url_for('validate') }}" method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}"><button>Validate Scenario</button></form>
+    {% if state.traffic.validation %}
+    {% set validation = state.traffic.validation %}
+    {% if validation.status == 'PASS' %}
+    <form action="{{ url_for('run_simulation') }}" method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}"><button>Run Simulation</button></form>
+    {% endif %}
+    <p role="status"><b>{{ validation.status }}</b> — {{ 'Scenario ready for simulation' if validation.status == 'PASS' else 'Scenario needs validation or corrections' }}</p>
+    <div class="table-wrap"><table><thead><tr><th>Check</th><th>Status</th><th>Evidence</th></tr></thead><tbody>
+    {% for check in validation.checks if check.name != 'Simulation startup' %}<tr><td>{{ check.name }}</td><td><span class="badge {{ check.status }}">{{ check.status }}</span></td><td>{{ check.detail }}</td></tr>{% endfor %}
+    </tbody></table></div>
+    <div class="actions downloads">
+      <a class="button secondary" href="{{ url_for('scenario_report') }}">Export Report</a>
+      <form action="{{ url_for('package') }}" method="post"><input type="hidden" name="csrf" value="{{ session.csrf }}"><button {% if validation.status != 'PASS' %}disabled{% endif %}>Export Scenario Package</button></form>
+    </div>
+    {% else %}<p class="empty">Not validated yet. Click Validate Scenario to check the generated files and create your report.</p>{% endif %}
+    {% else %}<p class="empty">Generate traffic first, then click Validate Scenario.</p>{% endif %}
+  </section>
+  <footer>Original uploads are preserved during this session. Export your scenario before restarting the server.</footer>
+</main>
+<dialog id="repair-dialog"><form action="{{ url_for('repair') }}" method="post">
+  <input type="hidden" name="csrf" value="{{ session.csrf }}"><input type="hidden" name="revision" value="{{ state.revision if state else 0 }}">
+  <h2>Choose repairs</h2><p>Only checked options will be applied to the current file.</p>
+  {% if not mapping %}<p class="notice">SUMO typemap not found. Speed and lane inference and unsupported-road removal are unavailable.</p>{% endif %}
+  {% for key, label in repairs.items() %}{% set count = state.counts.get(key, 0) if state and state.counts else 0 %}
+  <label class="repair-option"><input type="checkbox" name="repairs" value="{{ key }}" {% if not count %}disabled{% endif %}><span>{{ label }}<small>{{ count }} eligible items</small></span></label>{% endfor %}
+  <p><small>Inferred speeds and lanes are modeling assumptions. Small-component removal deletes eligible disconnected roads with at most 2 ways per component; review whether these roads are intentional.</small></p>
+  <div class="actions"><button type="button" class="secondary" onclick="this.closest('dialog').close()">Cancel</button><button>Apply selected repairs</button></div>
+</form></dialog>
+<script>
+const analyzeForm = document.getElementById('analyze-form');
+analyzeForm?.addEventListener('submit', event => {
+  if (analyzeForm.dataset.ready) return;
+  event.preventDefault();
+  const button = analyzeForm.querySelector('button');
+  button.disabled = true;
+  document.getElementById('analysis-content').hidden = true;
+  document.getElementById('analysis-loading').hidden = false;
+  window.setTimeout(() => { analyzeForm.dataset.ready = 'true'; analyzeForm.submit(); }, 5000);
+});
+const compositionForm = document.querySelector('.traffic-form');
+const compositionInputs = document.getElementById('composition-inputs');
+const compositionRadios = compositionForm.querySelectorAll('input[name="vehicle_class"]');
+const compositionFields = compositionInputs.querySelectorAll('input[type="number"]');
+const typeToggles = compositionInputs.querySelectorAll('.type-toggle');
+const compositionTotal = document.getElementById('composition-total');
+function updateComposition() {
+  const mode = compositionForm.querySelector('input[name="vehicle_class"]:checked').value;
+  compositionInputs.disabled = mode === 'passenger';
+  typeToggles.forEach(toggle => {
+    const field = compositionForm.querySelector(`input[name="${toggle.dataset.field}"]`);
+    field.disabled = mode === 'passenger' || !toggle.checked;
+  });
+  const total = [...compositionFields].reduce((sum, field) => sum + (field.disabled ? 0 : Number(field.value)), 0);
+  const invalidTotal = mode === 'custom' && total !== 100;
+  compositionTotal.value = mode === 'passenger' ? 'Total: 100%' : `Total: ${total}%${invalidTotal ? ' (must equal 100%)' : ''}`;
+  compositionForm.querySelector('input[value="custom"]').setCustomValidity(invalidTotal ? 'Vehicle percentages must total 100%.' : '');
+}
+compositionRadios.forEach(radio => radio.addEventListener('change', updateComposition));
+compositionFields.forEach(field => field.addEventListener('input', updateComposition));
+typeToggles.forEach(toggle => toggle.addEventListener('change', updateComposition));
+updateComposition();
+document.querySelectorAll('form:not(#analyze-form)').forEach(form => form.addEventListener('submit', () => {
+  const button = form.querySelector('button:not([type="button"])');
+  if (button) { button.disabled = true; button.textContent = 'Working…'; }
+}));
+</script>
+</body></html>

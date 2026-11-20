@@ -1,0 +1,22 @@
+# Python environments and caches
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local configuration and credentials
+.env
+.env.*
+!.env.example
+
+# User uploads and generated simulation artifacts
+/instance/
+/analysis_check/
+/quality_check/
+/repair_check/
+/selective_check/
+/sumo_scenario/
+/validation_smoke/
+/routes.rou.xml
+*.log
